@@ -2,7 +2,7 @@ import { load } from "cheerio"
 import express from "express"
 import TelegramBot from "node-telegram-bot-api"
 
-import 'dotenv/config'
+import "dotenv/config"
 
 const TWITTER_BEARER_TOKEN = process.env.TWITTER_BEARER_TOKEN
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
@@ -39,7 +39,7 @@ app.get("/", async (req, res) => {
   const [linkedin, medium, discord, telegram, twitter] = await Promise.all([
     fetchWithCache("linkedin", getLinkedInFollowers),
     fetchWithCache("medium", getMediumFollowers),
-    fetchWithCache("discord", getDiscorServerdMembers),
+    fetchWithCache("discord", getDiscordServerdMembers),
     fetchWithCache("telegram", () => getTelegramMembers(TELEGRAM_BOT_TOKEN)),
     fetchWithCache("twitter", getTwitterFollowers),
   ])
@@ -62,11 +62,7 @@ app.get("/medium", async (req, res) => {
 })
 
 app.get("/discord", async (req, res) => {
-  res.json(
-    await fetchWithCache("discord", () =>
-      getDiscorServerdMembers(WITNET_DISCORD_MEE6_LEADERBOARD),
-    ),
-  )
+  res.json(await fetchWithCache("discord", getDiscordServerdMembers))
 })
 
 app.get("/telegram", async (req, res) => {
@@ -142,7 +138,7 @@ async function getMediumFollowers() {
   }
 }
 
-async function getMee6LeaderboardDiscord(apiUrl, page = 0) {
+async function getMee6LeaderboardDiscord(page = 0) {
   try {
     const response = await fetch(
       `https://mee6.xyz/api/plugins/levels/leaderboard/${WITNET_DISCORD_GUILD_ID}?page=${page}`,
@@ -161,7 +157,7 @@ async function getMee6LeaderboardDiscord(apiUrl, page = 0) {
 }
 
 // Fetch multiple pages (first 3 pages)
-async function getDiscorServerdMembers() {
+async function getDiscordServerdMembers() {
   try {
     const maxPages = 100
     let members = 0
