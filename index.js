@@ -1,86 +1,13 @@
 import { load } from "cheerio"
-import express from "express"
+import { Client, GatewayIntentBits } from "discord.js"
 import TelegramBot from "node-telegram-bot-api"
-
-import "dotenv/config"
 
 const TWITTER_BEARER_TOKEN = process.env.TWITTER_BEARER_TOKEN
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
-const WITNET_DISCORD_GUILD_ID = process.env.WITNET_DISCORD_GUILD_ID
-
-const app = express()
-const port = process.env.PORT || 3000
+const WITNET_DISCORD_TOKEN = process.env.WITNET_DISCORD_TOKEN
 
 const CACHE_DURATION_MS = process.env.CACHE_DURATION_MS || 60 * 60 * 12000 // 12 hour in milliseconds
 const cache = {}
-
-// Generic caching function
-async function fetchWithCache(key, fetchFunction) {
-  const now = Date.now()
-
-  if (!cache[key] || now - cache[key].lastFetchTime > CACHE_DURATION_MS) {
-    console.log(`Fetching data for ${key}`)
-    try {
-      const data = await fetchFunction()
-      cache[key] = { data, lastFetchTime: now }
-    } catch (error) {
-      console.error(`Error fetching data for ${key}`, error)
-      return { error: error.message }
-    }
-  } else {
-    console.log(`Using cached data for ${key}`)
-  }
-
-  return cache[key].data
-}
-
-// API endpoints
-app.get("/", async (req, res) => {
-  const [linkedin, medium, discord, telegram, twitter] = await Promise.all([
-    fetchWithCache("linkedin", getLinkedInFollowers),
-    fetchWithCache("medium", getMediumFollowers),
-    fetchWithCache("discord", getDiscordServerdMembers),
-    fetchWithCache("telegram", () => getTelegramMembers(TELEGRAM_BOT_TOKEN)),
-    fetchWithCache("twitter", getTwitterFollowers),
-  ])
-
-  res.json({
-    linkedin,
-    medium,
-    discord,
-    telegram,
-    twitter,
-  })
-})
-
-app.get("/linkedin", async (req, res) => {
-  res.json(await fetchWithCache("linkedin", getLinkedInFollowers))
-})
-
-app.get("/medium", async (req, res) => {
-  res.json(await fetchWithCache("medium", getMediumFollowers))
-})
-
-app.get("/discord", async (req, res) => {
-  res.json(await fetchWithCache("discord", getDiscordServerdMembers))
-})
-
-app.get("/telegram", async (req, res) => {
-  res.json(
-    await fetchWithCache("telegram", () =>
-      getTelegramMembers(TELEGRAM_BOT_TOKEN),
-    ),
-  )
-})
-
-app.get("/twitter", async (req, res) => {
-  res.json(await fetchWithCache("twitter", getTwitterFollowers))
-})
-
-// Start the server
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`)
-})
 
 // Function to get LinkedIn followers count
 async function getLinkedInFollowers() {
@@ -138,43 +65,23 @@ async function getMediumFollowers() {
   }
 }
 
-async function getMee6LeaderboardDiscord(page = 0) {
-  try {
-    const response = await fetch(
-      `https://mee6.xyz/api/plugins/levels/leaderboard/${WITNET_DISCORD_GUILD_ID}?page=${page}`,
-      { method: "GET" },
-    )
-    const leaderboard = (await response.json()).players
-
-    return leaderboard.length
-  } catch (error) {
-    console.error(
-      "Error fetching leaderboard:",
-      error.response?.data || error.message,
-    )
-    throw error
-  }
-}
-
-// Fetch multiple pages (first 3 pages)
 async function getDiscordServerdMembers() {
-  try {
-    const maxPages = 100
-    let members = 0
-    for (let page = 0; page < maxPages; page++) {
-      const leaderboard = await getMee6LeaderboardDiscord(page)
-      if (leaderboard === 0) {
-        break
-      }
-      members = leaderboard + members
-      await new Promise((resolve) => setTimeout(resolve, 100)) // Delay 1 second
-    }
+  return new Promise((resolve) => {
+    const client = new Client({
+      intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+    })
 
-    return members.toString()
-  } catch (error) {
-    console.error("[DISCORD] Error fetching members:", error.message)
-    return null
-  }
+    client.once("ready", () => {
+      let members = 0
+      client.guilds.cache.forEach((guild) => {
+        members += guild.memberCount
+      })
+
+      resolve(members)
+    })
+
+    client.login(WITNET_DISCORD_TOKEN)
+  })
 }
 
 // Function to get the number of members in Witnet's Telegram group
@@ -202,7 +109,7 @@ async function getFollowersCount(userId) {
       throw new Error(`Failed to fetch twitter data: ${response.status}`)
     }
     const json = await response.json()
-    return json.data.public_metrics.followers_count
+    return json?.data?.public_metrics?.followers_count
   } catch (error) {
     console.error("[TWITTER] Error getting followers count:", error)
     return null
@@ -224,28 +131,46 @@ async function getTwitterFollowers() {
   }
 }
 
-// // Function to get the user ID from the username
-// async function getUserId(username) {
-//   try {
-//     // Example response:
-//   //   data: {
-//   //   id: '955794358242029568',
-//   //   name: 'Witnet - the multichain decentralized oracle',
-//   //   username: 'witnet_io'
-//   // }
+// Generic caching function
+async function fetchWithCache(key, fetchFunction) {
+  const now = Date.now()
 
-//     const response = await fetch(`https://api.twitter.com/2/users/by/username/${username}`, {
-//       method: 'GET',
-//       headers: {
-//         'Authorization': `Bearer ${TWITTER_BEARER_TOKEN}`,
-//       }
-//     });
-//     const json = await response.json();
-//     console.log('json', json)
-//     return json.data.id;
-//   } catch (error) {
-//     console.error('Error getting user ID:', error);
-//     throw error;
-//     return null
-//   }
-// }
+  if (!cache[key] || now - cache[key].lastFetchTime > CACHE_DURATION_MS) {
+    console.log(`Fetching data for ${key}`)
+    try {
+      const data = await fetchFunction()
+      cache[key] = { data, lastFetchTime: now }
+    } catch (error) {
+      console.error(`Error fetching data for ${key}`, error)
+      return { error: error.message }
+    }
+  } else {
+    console.log(`Using cached data for ${key}`)
+  }
+
+  return cache[key].data
+}
+
+// LAMBDA HANDLER
+export const handler = async (_event) => {
+  const [linkedin, medium, discord, telegram, twitter] = await Promise.all([
+    fetchWithCache("linkedin", getLinkedInFollowers),
+    fetchWithCache("medium", getMediumFollowers),
+    fetchWithCache("discord", getDiscordServerdMembers),
+    fetchWithCache("telegram", () => getTelegramMembers(TELEGRAM_BOT_TOKEN)),
+    //fetchWithCache("twitter", getTwitterFollowers),
+  ])
+
+  const response = {
+    statusCode: 200,
+    body: {
+      linkedin,
+      medium,
+      discord,
+      telegram,
+      twitter: null,
+      time: Date.now(),
+    },
+  }
+  return response
+}
